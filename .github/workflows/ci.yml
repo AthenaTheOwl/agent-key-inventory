@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install
+        run: python -m pip install -e . pytest
+      - name: pytest
+        run: python -m pytest -q
+      - name: acceptance - six grants, two used, four unused, exit 1
+        run: |
+          agent-key-inventory scan --home examples/home --env-names examples/session.env-names --json > inventory.json
+          set +e
+          agent-key-inventory diff inventory.json examples/usage-2026-09.jsonl
+          test $? -eq 1
+      - name: acceptance - no planted value in any output
+        run: |
+          agent-key-inventory scan --home examples/home --env-names examples/session.env-names --cwd examples/project > scan.txt
+          ! grep -q "PLANTED-SECRET-VALUE" scan.txt inventory.json

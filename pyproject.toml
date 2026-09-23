@@ -1,0 +1,19 @@
+[project]
+name = "agent-key-inventory"
+version = "0.1.0"
+description = "List the credentials an agent session inherits (names and locations, never values) and diff granted against used."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Vignesh Gopalakrishnan" }]
+dependencies = []
+
+[project.scripts]
+agent-key-inventory = "agent_key_inventory.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["agent_key_inventory"]
