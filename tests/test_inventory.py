@@ -17,9 +17,9 @@ def _run(argv, capsys):
 
 
 def test_fixture_home_has_six_grants():
-    from agent_key_inventory.scan import parse_env_file
+    from agent_key_inventory.scan import parse_env_names
 
-    ids = [g["grant_id"] for g in scan(HOME, parse_env_file(ENV))]
+    ids = [g["grant_id"] for g in scan(HOME, parse_env_names(ENV))]
     assert ids == [
         "aws:profile/default",
         "env:ANTHROPIC_API_KEY",
