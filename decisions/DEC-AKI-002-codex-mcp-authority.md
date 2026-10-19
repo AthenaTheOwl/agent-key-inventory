@@ -54,3 +54,27 @@ Only `<home>/.codex/config.toml` is read at home; `$CODEX_HOME` is not followed.
 
 Configuration reference checked 2026-10-19:
 [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference).
+
+## Amendment, 2026-10-19: name-shaped values
+
+This replaces the rule above that a secret shaped like an ordinary variable name is
+recorded as written. A value in a field that should name a variable (the four Codex
+fields listed above, and `env` keys in the JSON MCP configs) is recorded as written
+only when it is clearly a name: the scanned environment defines it, or it is an
+upper-case name (`[A-Z_][A-Z0-9_]*`) whose last `_`-separated word is a credential
+word the environment reader already looks for (`KEY`, `TOKEN`, `SECRET`, `PASSWORD`,
+`PASSWD`, `CREDENTIAL`, `AUTH`, `PAT`, `SESSION`, optionally plural or prefixed with
+`API`). Values that are not names, and known token formats, stay `<invalid-name>`.
+Any other name-shaped value is recorded as `<withheld-name:FINGERPRINT>`: the first
+12 hex digits of PBKDF2-HMAC-SHA256 over the value with a fixed salt and 100,000
+iterations. The label is stable across runs and machines, so a usage log can name the
+grant, and the slow hash raises the cost of the guessing that DEC-AKI-001 warns about
+for short values. The cost is that a real name with no credential word, such as
+`MCP_REGION`, is withheld unless the scanned environment defines it.
+
+Field roles rechecked 2026-10-19 against the
+[Codex MCP page](https://learn.chatgpt.com/docs/extend/mcp?surface=cli): `env_vars`,
+`bearer_token_env_var` and `env_http_headers` values name variables; `env` keys name the
+variables set for the server and its values are literal; `http_headers` values are
+literal. Codex documents no syntax rule for a variable name, so the rule above is this
+scanner's own.

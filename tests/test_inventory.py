@@ -190,3 +190,87 @@ def test_pem_header_marks_a_private_key_without_a_pub(tmp_path):
     (ssh / "notes.txt").write_text("not a key", encoding="utf-8")
     grants = scan(tmp_path, {})
     assert [g["grant_id"] for g in grants] == ["ssh:key/deploy_key"]
+
+
+# Identifier-shaped values: valid variable names that are nonetheless secrets. Assembled at
+# runtime so no literal sits in the source; matched case-insensitively.
+IDENT_PLANTED = re.compile(r"PLANTED_?SECRET_?VALUE_?\d+", re.IGNORECASE)
+WITHHELD = re.compile(r"<withheld-name:[0-9a-f]{12}>")
+
+
+def _identifier_shaped_home(root):
+    """Name-shaped secrets in every field that should name a variable, beside real names."""
+    v = "PLANTED" + "_SECRET_VALUE_"
+    config = root / ".codex" / "config.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text("\n".join([
+        "[mcp_servers.remote]",
+        f'bearer_token_env_var = "{v}20"',
+        f'env_vars = ["{v}21", {{ name = "{v}22", source = "remote" }}, "{v.lower()}23", "DOCS_TOKEN"]',
+        "[mcp_servers.remote.env_http_headers]",
+        f'Authorization = "{v}24"',
+        'X-Api-Key = "REMOTE_API_KEY"',
+        'X-Region = "MCP_REGION"',
+        "[mcp_servers.remote.env]",
+        f'{v}25 = "x"',
+        'INLINE_TOKEN = "x"',
+        "[mcp_servers.other]",
+        f'bearer_token_env_var = "{v}20"',
+        "",
+    ]), encoding="utf-8")
+    (root / ".mcp.json").write_text(json.dumps({"mcpServers": {"json": {"command": "x", "env": {
+        f"{v}26": "x", "GITHUB_TOKEN": "x"}}}}), encoding="utf-8")
+    return root
+
+
+def test_identifier_shaped_values_in_name_fields_never_print(tmp_path, capsys):
+    home = _identifier_shaped_home(tmp_path / "ident-home")
+    names = tmp_path / "env-names"
+    names.write_text("EDITOR\n", encoding="utf-8")
+    inventory = tmp_path / "inventory.json"
+    outputs = []
+    for argv in (
+        ["scan", "--home", str(home), "--env-names", str(names), "--cwd", str(home)],
+        ["scan", "--home", str(home), "--env-names", str(names), "--cwd", str(home), "--json"],
+        ["scan", "--home", str(HOME), "--env-names", str(names), "--cwd", str(home)],
+        ["scan", "--home", str(HOME), "--env-names", str(names), "--cwd", str(home), "--json"],
+    ):
+        code, out = _run(argv, capsys)
+        assert code == 0
+        outputs.append(out)
+    for scanned in outputs[1::2]:
+        inventory.write_text(scanned, encoding="utf-8")
+        outputs.append(_run(["diff", str(inventory), str(USAGE)], capsys)[1])
+        outputs.append(_run(["diff", str(inventory), str(USAGE), "--json"], capsys)[1])
+    for text in outputs:
+        assert not IDENT_PLANTED.search(text), text
+    # the fixture really holds the seven distinct planted values, in both spellings
+    text = (home / ".codex" / "config.toml").read_text(encoding="utf-8") + (home / ".mcp.json").read_text()
+    assert len({m.upper() for m in IDENT_PLANTED.findall(text)}) == 7
+
+
+def test_identifier_shaped_values_get_a_stable_fingerprint(tmp_path):
+    home = _identifier_shaped_home(tmp_path / "a")
+    ids = {g["grant_id"] for g in scan(home, {"EDITOR": "set"}, home)}
+    listed = {i for i in ids if "/env/" in i and not WITHHELD.search(i)}
+    assert listed == {"mcp:codex/remote/env/DOCS_TOKEN", "mcp:codex/remote/env/REMOTE_API_KEY",
+                      "mcp:codex/remote/env/INLINE_TOKEN", "mcp:server/json/env/GITHUB_TOKEN"}
+    withheld = {WITHHELD.search(i).group() for i in ids if WITHHELD.search(i)}
+    # planted 20 (in two servers), 21-26, and MCP_REGION, a name nothing confirms: eight labels
+    assert len(withheld) == 8
+    assert ({i.split("/env/")[1] for i in ids if i.startswith("mcp:codex/other/env/")}
+            <= withheld)
+    # the same value gets the same label in another server, another run and another directory
+    again = {g["grant_id"] for g in scan(_identifier_shaped_home(tmp_path / "b"), {}, None)}
+    assert {i for i in again if i.startswith("mcp:codex/")} == {i for i in ids if i.startswith("mcp:codex/")}
+    other = [i for i in ids if i.startswith("mcp:codex/other/env/")]
+    assert len(other) == 1 and other[0].replace("other", "remote", 1) in ids
+
+
+def test_a_name_the_scanned_environment_defines_is_listed_as_written(tmp_path):
+    home = _identifier_shaped_home(tmp_path)
+    without = {g["grant_id"] for g in scan(home, {})}
+    assert "mcp:codex/remote/env/MCP_REGION" not in without
+    with_env = {g["grant_id"] for g in scan(home, {"MCP_REGION": "set"})}
+    assert "mcp:codex/remote/env/MCP_REGION" in with_env
+    assert len(with_env) == len(without)

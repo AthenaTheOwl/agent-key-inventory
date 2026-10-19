@@ -8,6 +8,8 @@ No function returns, logs or stores a value. That is the contract the tests pin.
 from __future__ import annotations
 
 import configparser
+import functools
+import hashlib
 import json
 import re
 import tomllib
@@ -20,6 +22,12 @@ INVALID_VAR = "<invalid-name>"
 # Credential formats that are also valid variable names. A field holding one is withheld.
 TOKEN_SHAPED = re.compile(r"gh[pousr]_[A-Za-z0-9]{30,}|github_pat_\w{20,}|(?:AKIA|ASIA)[A-Z0-9]{16}$"
                           r"|[rs]k_(?:live|test)_\w{10,}|AIza\w{30,}|(?:hf|npm)_[A-Za-z0-9]{30,}")
+# A value in a variable-name field is listed as written only when it is clearly a name: the
+# scanned environment defines it, or it is an upper-case name whose last word is one of the
+# credential words ENV_NAME looks for. Anything else that is shaped like a name is withheld.
+UPPER_VAR_NAME = re.compile(r"[A-Z_][A-Z0-9_]*")
+CREDENTIAL_WORD = re.compile(r"(?:API)?(?:KEYS?|TOKENS?|SECRETS?|PASSWORD|PASSWD|CREDENTIALS?|AUTH|PAT|SESSION)")
+WITHHELD_VAR = "<withheld-name:{}>"
 HEADER_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")  # RFC 9110 token
 INVALID_HEADER = "<invalid-header>"
 CODEX_AUTH_MODES = ("oauth", "chatgpt")
@@ -137,7 +145,7 @@ MCP_FILES = [".mcp.json", ".cursor/mcp.json", ".claude.json", ".claude/settings.
              "Library/Application Support/Claude/claude_desktop_config.json"]
 
 
-def from_mcp(home: Path, cwd: Path | None) -> list[Grant]:
+def from_mcp(home: Path, cwd: Path | None, known: frozenset[str] = frozenset()) -> list[Grant]:
     """MCP servers an agent can call, and the env var names each one is handed."""
     grants = []
     candidates = [(home / f, home) for f in MCP_FILES] + ([(cwd / ".mcp.json", cwd)] if cwd else [])
@@ -151,21 +159,39 @@ def from_mcp(home: Path, cwd: Path | None) -> list[Grant]:
         where = _rel(path, root) if root == home else "./" + path.relative_to(root).as_posix()
         for name, spec in sorted(servers.items()):
             grants.append(Grant(f"mcp:server/{name}", "mcp-server", where, name))
-            for var in sorted((spec or {}).get("env", {}) or {}):
+            env = (spec or {}).get("env", {}) or {}
+            for var in sorted({var for var in (_var_name(k, known) for k in env) if var}):
                 grants.append(Grant(f"mcp:server/{name}/env/{var}", "mcp-server-env", where, var))
     return grants
 
 
-def _var_name(value: object) -> str | None:
-    """A config value that should name an env var. Anything else may be the secret itself."""
+@functools.lru_cache(maxsize=None)
+def _fingerprint(value: str) -> str:
+    """Stable, salted and deliberately slow, so the label names an entry without revealing it."""
+    digest = hashlib.pbkdf2_hmac("sha256", value.encode("utf-8"), b"agent-key-inventory/withheld-name", 100_000)
+    return digest.hex()[:12]
+
+
+def _var_name(value: object, known: frozenset[str] = frozenset()) -> str | None:
+    """A config value that should name an env var. Anything else may be the secret itself.
+
+    `known` holds the variable names the scanned environment defines. A value is returned as
+    written only when it is clearly a name (see UPPER_VAR_NAME and CREDENTIAL_WORD); a value
+    that is not a name at all, or is a known token format, becomes <invalid-name>; any other
+    name-shaped value becomes <withheld-name:FINGERPRINT>.
+    """
     if not isinstance(value, str) or not value:
         return None
     if not VAR_NAME.fullmatch(value) or TOKEN_SHAPED.match(value):
         return INVALID_VAR
-    return value
+    if value in known:
+        return value
+    if UPPER_VAR_NAME.fullmatch(value) and CREDENTIAL_WORD.fullmatch(value.rsplit("_", 1)[-1]):
+        return value
+    return WITHHELD_VAR.format(_fingerprint(value))
 
 
-def from_codex_mcp(home: Path, cwd: Path | None) -> list[Grant]:
+def from_codex_mcp(home: Path, cwd: Path | None, known: frozenset[str] = frozenset()) -> list[Grant]:
     """Inventory Codex MCP declarations without resolving or returning credentials.
 
     OAuth stores and header helper commands are deliberately never read or run.
@@ -195,19 +221,19 @@ def from_codex_mcp(home: Path, cwd: Path | None) -> list[Grant]:
             server = f"mcp:codex/{name}"
             grants.append(Grant(server, "mcp-server", where, name))
             env = spec.get("env", {})
-            variables = {var for var in map(_var_name, env) if var} if isinstance(env, dict) else set()
+            variables = {var for var in (_var_name(k, known) for k in env) if var} if isinstance(env, dict) else set()
             forwarded = spec.get("env_vars", [])
             if isinstance(forwarded, list):
                 for item in forwarded:
-                    var = _var_name(item.get("name") if isinstance(item, dict) else item)
+                    var = _var_name(item.get("name") if isinstance(item, dict) else item, known)
                     if var:
                         variables.add(var)
-            bearer = _var_name(spec.get("bearer_token_env_var"))
+            bearer = _var_name(spec.get("bearer_token_env_var"), known)
             if bearer:
                 variables.add(bearer)
             headers = spec.get("env_http_headers", {})
             if isinstance(headers, dict):
-                variables.update(var for var in map(_var_name, headers.values()) if var)
+                variables.update(var for var in (_var_name(v, known) for v in headers.values()) if var)
             for var in sorted(variables):
                 grants.append(Grant(f"{server}/env/{var}", "mcp-server-env", where, var))
             # Header *names* identify configured inline authority; values never escape.
@@ -231,6 +257,7 @@ def from_codex_mcp(home: Path, cwd: Path | None) -> list[Grant]:
 
 
 def scan(home: Path, env: dict[str, str], cwd: Path | None = None) -> list[dict]:
+    known = frozenset(env)  # names only; the values are never consulted here
     grants = (from_env(env) + from_aws(home) + from_gh(home) + from_ssh(home)
-              + from_token_files(home) + from_mcp(home, cwd) + from_codex_mcp(home, cwd))
+              + from_token_files(home) + from_mcp(home, cwd, known) + from_codex_mcp(home, cwd, known))
     return [asdict(g) for g in sorted(set(grants))]

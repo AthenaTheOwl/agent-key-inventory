@@ -55,8 +55,13 @@ The scan includes inline, forwarded, bearer-token and header-sourcing
 stay private. A field that should name a variable but holds anything else, or holds
 a known token format such as a GitHub, AWS or Stripe key, is listed as
 `<invalid-name>`, since it may be the secret itself; a header name that is not a
-valid HTTP token is listed as `<invalid-header>`. A secret shaped like an ordinary
-variable name cannot be told apart from one and is listed as written. It also
+valid HTTP token is listed as `<invalid-header>`. A value shaped like an ordinary
+variable name is listed as written only when it is clearly a name: the scanned
+environment defines it, or it is upper case and ends in a credential word such as
+`_TOKEN`, `_KEY`, `_SECRET` or `_PASSWORD`. Any other name-shaped value, such as a
+lower-case name or `MY_ENDPOINT` when nothing defines it, may be the secret itself and
+is listed as `<withheld-name:FINGERPRINT>`, a stable 12-hex-digit label that never
+contains the value. The same guard applies to `env` keys in the JSON MCP configs. It also
 records that a server has an inline `oauth.client_secret` (kind `mcp-server-inline-secret`), an `auth`
 mode (`oauth` or `chatgpt`, anything else as `<invalid-mode>`; recorded only when
 `auth` is set explicitly, the implicit default `oauth` is not assumed) or an
