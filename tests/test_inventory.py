@@ -86,9 +86,9 @@ def test_no_output_ever_contains_a_planted_value(tmp_path, capsys):
         outputs.append(_run(["diff", str(inventory), str(USAGE), "--json"], capsys)[1])
     for text in outputs:
         assert not PLANTED.search(text), text
-    # The original fixture and Codex fixture hold eight distinct planted values.
+    # The original fixture and Codex fixture hold ten distinct planted values.
     planted = {m for p in EX.rglob("*") if p.is_file() for m in PLANTED.findall(p.read_text(encoding="utf-8"))}
-    assert len(planted) == 8
+    assert len(planted) == 10
 
 
 def test_codex_mcp_lists_inline_forwarded_and_http_authority():
@@ -98,6 +98,8 @@ def test_codex_mcp_lists_inline_forwarded_and_http_authority():
         "mcp:codex/docs/env/DOCS_TOKEN", "mcp:codex/docs/env/REMOTE_TOKEN",
         "mcp:codex/remote", "mcp:codex/remote/env/MCP_BEARER_TOKEN",
         "mcp:codex/remote/env/REMOTE_API_KEY", "mcp:codex/remote/header/Authorization",
+        "mcp:codex/remote/auth/oauth", "mcp:codex/remote/oauth/client_secret",
+        "mcp:codex/helper", "mcp:codex/helper/auth/chatgpt", "mcp:codex/helper/http_headers_helper",
     }
 
 

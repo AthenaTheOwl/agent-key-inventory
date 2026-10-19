@@ -29,3 +29,14 @@ Codex grant ids use their own namespace, `mcp:codex/<name>`, with the same
 JSON readers gave a Codex server and a `.mcp.json` server of the same name one
 grant id, so `diff` counted use of either as use of both. Ids from the JSON
 readers are unchanged.
+
+Three more settings carry authority and are recorded by presence only: an inline
+`oauth.client_secret`, which Codex saves in `config.toml` (kind
+`mcp-server-inline-secret`); the `auth` mode, `oauth` or `chatgpt` (the current
+ChatGPT session), with any other value recorded as `<invalid-mode>`; and an
+`http_headers_helper` command. The secret and the command are never returned, and
+the helper is never run. The planted Codex fixture now also holds values in a
+client secret and a helper command.
+
+Configuration reference checked 2026-10-19:
+[Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference).

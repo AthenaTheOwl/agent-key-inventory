@@ -17,6 +17,8 @@ from pathlib import Path
 ENV_NAME = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|_PAT$|SESSION)", re.IGNORECASE)
 VAR_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 INVALID_VAR = "<invalid-name>"
+CODEX_AUTH_MODES = ("oauth", "chatgpt")
+INVALID_MODE = "<invalid-mode>"
 
 
 @dataclass(frozen=True, order=True)
@@ -206,6 +208,18 @@ def from_codex_mcp(home: Path, cwd: Path | None) -> list[Grant]:
             if isinstance(static_headers, dict):
                 for header in sorted(static_headers):
                     grants.append(Grant(f"{server}/header/{header}", "mcp-server-header", where, header))
+            # Settings that carry authority are recorded by presence; their values never escape.
+            oauth = spec.get("oauth", {})
+            if isinstance(oauth, dict) and oauth.get("client_secret"):
+                grants.append(Grant(f"{server}/oauth/client_secret", "mcp-server-inline-secret", where,
+                                    "oauth.client_secret"))
+            auth = spec.get("auth")
+            if auth:
+                mode = auth if isinstance(auth, str) and auth in CODEX_AUTH_MODES else INVALID_MODE
+                grants.append(Grant(f"{server}/auth/{mode}", "mcp-server-auth", where, mode))
+            if spec.get("http_headers_helper"):
+                grants.append(Grant(f"{server}/http_headers_helper", "mcp-server-header-helper", where,
+                                    "http_headers_helper"))
     return grants
 
 

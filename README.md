@@ -42,7 +42,7 @@ granted 6, used 2, unused 4
 
 Exit 1, because four grants went unused and the default `--max-unused` is 0. Exit 2 means bad input.
 
-The example home and project hold six planted values; the separate Codex fixture adds two. All are `PLANTED-SECRET-VALUE-NN`. The test suite runs output modes and fails if any of them appears.
+The example home and project hold six planted values; the separate Codex fixture adds four. All are `PLANTED-SECRET-VALUE-NN`. The test suite runs output modes and fails if any of them appears.
 
 Without `--home` and `--env-file` it scans your own home directory and this process's environment. Output stays names and locations, but it is still a map of what your machine can reach, so treat it accordingly.
 
@@ -52,7 +52,10 @@ Home and explicitly supplied project `.codex/config.toml` files are also invento
 The scan includes inline and forwarded environment variable names, bearer-token
 variable names, and static HTTP header names. Header values stay private, and a
 field that should name a variable but holds anything else is listed as
-`<invalid-name>`, since it may be the secret itself. Try the synthetic fixture with `agent-key-inventory scan --home examples/codex-home --env-names examples/session.env-names`.
+`<invalid-name>`, since it may be the secret itself. It also records that a server
+has an inline `oauth.client_secret` (kind `mcp-server-inline-secret`), an `auth`
+mode (`oauth` or `chatgpt`, anything else as `<invalid-mode>`) or an
+`http_headers_helper` command, never the secret or the command. Try the synthetic fixture with `agent-key-inventory scan --home examples/codex-home --env-names examples/session.env-names`.
 This inventories declarations, including disabled servers. It does not resolve
 Codex's configuration layers, inspect OAuth storage, or run header helpers.
 
