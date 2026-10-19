@@ -72,7 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("scan", help="list inherited credentials by name and location")
     s.add_argument("--home", default="~", help="home directory to scan (default: ~)")
-    s.add_argument("--cwd", help="project directory to check for .mcp.json")
+    s.add_argument("--cwd", help="project directory to check for .mcp.json and .codex/config.toml")
     s.add_argument("--env-file", help="read the environment from a KEY=VALUE file instead of this process")
     s.add_argument("--env-names", help="read variable names only, one per line, instead of this process")
     s.add_argument("--json", action="store_true")

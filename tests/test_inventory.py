@@ -59,9 +59,11 @@ def test_no_output_ever_contains_a_planted_value(tmp_path, capsys):
         ["scan", "--home", str(EX / "codex-home"), "--env-names", str(ENV), "--json"],
     ):
         outputs.append(_run(argv, capsys)[1])
-    inventory.write_text(outputs[-1], encoding="utf-8")
-    outputs.append(_run(["diff", str(inventory), str(USAGE)], capsys)[1])
-    outputs.append(_run(["diff", str(inventory), str(USAGE), "--json"], capsys)[1])
+    # diff both --json inventories: the original home/project scan and the Codex scan.
+    for scanned in (outputs[1], outputs[3]):
+        inventory.write_text(scanned, encoding="utf-8")
+        outputs.append(_run(["diff", str(inventory), str(USAGE)], capsys)[1])
+        outputs.append(_run(["diff", str(inventory), str(USAGE), "--json"], capsys)[1])
     for text in outputs:
         assert not PLANTED.search(text), text
     # The original fixture and Codex fixture hold eight distinct planted values.
