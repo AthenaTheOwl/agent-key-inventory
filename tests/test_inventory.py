@@ -55,6 +55,8 @@ def test_no_output_ever_contains_a_planted_value(tmp_path, capsys):
     for argv in (
         ["scan", "--home", str(HOME), "--env-names", str(ENV), "--cwd", str(PROJECT)],
         ["scan", "--home", str(HOME), "--env-names", str(ENV), "--cwd", str(PROJECT), "--json"],
+        ["scan", "--home", str(EX / "codex-home"), "--env-names", str(ENV)],
+        ["scan", "--home", str(EX / "codex-home"), "--env-names", str(ENV), "--json"],
     ):
         outputs.append(_run(argv, capsys)[1])
     inventory.write_text(outputs[-1], encoding="utf-8")
@@ -62,9 +64,31 @@ def test_no_output_ever_contains_a_planted_value(tmp_path, capsys):
     outputs.append(_run(["diff", str(inventory), str(USAGE), "--json"], capsys)[1])
     for text in outputs:
         assert not PLANTED.search(text), text
-    # and the fixture really does hold six planted values, so the check is not vacuous
+    # The original fixture and Codex fixture hold eight distinct planted values.
     planted = {m for p in EX.rglob("*") if p.is_file() for m in PLANTED.findall(p.read_text(encoding="utf-8"))}
-    assert len(planted) == 6
+    assert len(planted) == 8
+
+
+def test_codex_mcp_lists_inline_forwarded_and_http_authority():
+    ids = {g["grant_id"] for g in scan(EX / "codex-home", {})}
+    assert ids == {
+        "mcp:server/docs", "mcp:server/docs/env/INLINE_TOKEN",
+        "mcp:server/docs/env/DOCS_TOKEN", "mcp:server/docs/env/REMOTE_TOKEN",
+        "mcp:server/remote", "mcp:server/remote/env/MCP_BEARER_TOKEN",
+        "mcp:server/remote/env/REMOTE_API_KEY", "mcp:server/remote/header/Authorization",
+    }
+
+
+def test_codex_project_config_is_included_and_malformed_config_is_skipped(tmp_path):
+    project = tmp_path / "project"
+    (project / ".codex").mkdir(parents=True)
+    config = project / ".codex" / "config.toml"
+    config.write_text('[mcp_servers.project]\ncommand = "example"\n', encoding="utf-8")
+    grants = scan(tmp_path / "home", {}, project)
+    assert grants == [{"grant_id": "mcp:server/project", "kind": "mcp-server",
+                       "source": "./.codex/config.toml", "name": "project"}]
+    config.write_text("invalid toml [", encoding="utf-8")
+    assert scan(tmp_path / "home", {}, project) == []
 
 
 def test_bad_usage_log_exits_2(tmp_path, capsys):
