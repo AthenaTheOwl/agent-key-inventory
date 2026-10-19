@@ -16,6 +16,23 @@ def _run(argv, capsys):
     return code, out.out + out.err
 
 
+def _misplaced_codex_home(root):
+    """Values typed where Codex expects env var names, assembled so no literal sits in the source."""
+    value = "PLANTED-SECRET-VALUE-"
+    config = root / ".codex" / "config.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text("\n".join([
+        "[mcp_servers.remote]",
+        f'bearer_token_env_var = "{value}11"',
+        f'env_vars = ["{value}12", {{ name = "Bearer {value}13" }}]',
+        "[mcp_servers.remote.env_http_headers]",
+        f'Authorization = "Bearer {value}14"',
+        'X-Api-Key = "REMOTE_API_KEY"',
+        "",
+    ]), encoding="utf-8")
+    return root
+
+
 def test_fixture_home_has_six_grants():
     from agent_key_inventory.scan import parse_env_names
 
@@ -51,16 +68,19 @@ def test_mcp_servers_and_their_env_names_are_listed():
 
 def test_no_output_ever_contains_a_planted_value(tmp_path, capsys):
     inventory = tmp_path / "inventory.json"
+    misplaced = _misplaced_codex_home(tmp_path / "misplaced-home")
     outputs = []
     for argv in (
         ["scan", "--home", str(HOME), "--env-names", str(ENV), "--cwd", str(PROJECT)],
         ["scan", "--home", str(HOME), "--env-names", str(ENV), "--cwd", str(PROJECT), "--json"],
         ["scan", "--home", str(EX / "codex-home"), "--env-names", str(ENV)],
         ["scan", "--home", str(EX / "codex-home"), "--env-names", str(ENV), "--json"],
+        ["scan", "--home", str(misplaced), "--env-names", str(ENV)],
+        ["scan", "--home", str(misplaced), "--env-names", str(ENV), "--json"],
     ):
         outputs.append(_run(argv, capsys)[1])
-    # diff both --json inventories: the original home/project scan and the Codex scan.
-    for scanned in (outputs[1], outputs[3]):
+    # diff every --json inventory: the original home/project scan and both Codex scans.
+    for scanned in (outputs[1], outputs[3], outputs[5]):
         inventory.write_text(scanned, encoding="utf-8")
         outputs.append(_run(["diff", str(inventory), str(USAGE)], capsys)[1])
         outputs.append(_run(["diff", str(inventory), str(USAGE), "--json"], capsys)[1])
@@ -79,6 +99,12 @@ def test_codex_mcp_lists_inline_forwarded_and_http_authority():
         "mcp:server/remote", "mcp:server/remote/env/MCP_BEARER_TOKEN",
         "mcp:server/remote/env/REMOTE_API_KEY", "mcp:server/remote/header/Authorization",
     }
+
+
+def test_codex_fields_that_name_a_variable_never_echo_a_value(tmp_path):
+    ids = {g["grant_id"] for g in scan(_misplaced_codex_home(tmp_path), {})}
+    assert ids == {"mcp:server/remote", "mcp:server/remote/env/<invalid-name>",
+                   "mcp:server/remote/env/REMOTE_API_KEY"}
 
 
 def test_codex_project_config_is_included_and_malformed_config_is_skipped(tmp_path):

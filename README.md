@@ -48,8 +48,9 @@ The example home and project hold six planted values; the separate Codex fixture
 
 Home and explicitly supplied project `.codex/config.toml` files are also inventoried.
 The scan includes inline and forwarded environment variable names, bearer-token
-variable names, and static HTTP header names. Header values stay private. Try the
-synthetic fixture with `agent-key-inventory scan --home examples/codex-home --env-names examples/session.env-names`.
+variable names, and static HTTP header names. Header values stay private, and a
+field that should name a variable but holds anything else is listed as
+`<invalid-name>`, since it may be the secret itself. Try the synthetic fixture with `agent-key-inventory scan --home examples/codex-home --env-names examples/session.env-names`.
 This inventories declarations, including disabled servers. It does not resolve
 Codex's configuration layers, inspect OAuth storage, or run header helpers.
 

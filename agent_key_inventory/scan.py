@@ -15,6 +15,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 ENV_NAME = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|_PAT$|SESSION)", re.IGNORECASE)
+VAR_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+INVALID_VAR = "<invalid-name>"
 
 
 @dataclass(frozen=True, order=True)
@@ -147,6 +149,13 @@ def from_mcp(home: Path, cwd: Path | None) -> list[Grant]:
     return grants
 
 
+def _var_name(value: object) -> str | None:
+    """A config value that should name an env var. Anything else may be the secret itself."""
+    if not isinstance(value, str) or not value:
+        return None
+    return value if VAR_NAME.fullmatch(value) else INVALID_VAR
+
+
 def from_codex_mcp(home: Path, cwd: Path | None) -> list[Grant]:
     """Inventory Codex MCP declarations without resolving or returning credentials.
 
@@ -178,15 +187,15 @@ def from_codex_mcp(home: Path, cwd: Path | None) -> list[Grant]:
             forwarded = spec.get("env_vars", [])
             if isinstance(forwarded, list):
                 for item in forwarded:
-                    var = item.get("name") if isinstance(item, dict) else item
-                    if isinstance(var, str) and var:
+                    var = _var_name(item.get("name") if isinstance(item, dict) else item)
+                    if var:
                         variables.add(var)
-            bearer = spec.get("bearer_token_env_var")
-            if isinstance(bearer, str) and bearer:
+            bearer = _var_name(spec.get("bearer_token_env_var"))
+            if bearer:
                 variables.add(bearer)
             headers = spec.get("env_http_headers", {})
             if isinstance(headers, dict):
-                variables.update(var for var in headers.values() if isinstance(var, str) and var)
+                variables.update(var for var in map(_var_name, headers.values()) if var)
             for var in sorted(variables):
                 grants.append(Grant(f"mcp:server/{name}/env/{var}", "mcp-server-env", where, var))
             # Header *names* identify configured inline authority; values never escape.

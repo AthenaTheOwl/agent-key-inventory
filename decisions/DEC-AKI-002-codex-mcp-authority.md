@@ -9,6 +9,8 @@ Read home and explicitly supplied project configurations with the standard
 library TOML reader. Record server names, inline and forwarded variable names,
 bearer-token variable names, and HTTP header names. Never resolve environment
 references, read OAuth stores, execute header helpers, or return header values.
+A field that should name a variable but holds anything else is recorded as
+`<invalid-name>`, because it may be the secret itself.
 Keep disabled declarations visible because a scan describes configured authority;
 the usage log remains the evidence that a particular grant was exercised.
 
