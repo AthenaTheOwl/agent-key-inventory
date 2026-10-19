@@ -17,6 +17,11 @@ from pathlib import Path
 ENV_NAME = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|_PAT$|SESSION)", re.IGNORECASE)
 VAR_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 INVALID_VAR = "<invalid-name>"
+# Credential formats that are also valid variable names. A field holding one is withheld.
+TOKEN_SHAPED = re.compile(r"gh[pousr]_[A-Za-z0-9]{30,}|github_pat_\w{20,}|(?:AKIA|ASIA)[A-Z0-9]{16}$"
+                          r"|[rs]k_(?:live|test)_\w{10,}|AIza\w{30,}|(?:hf|npm)_[A-Za-z0-9]{30,}")
+HEADER_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")  # RFC 9110 token
+INVALID_HEADER = "<invalid-header>"
 CODEX_AUTH_MODES = ("oauth", "chatgpt")
 INVALID_MODE = "<invalid-mode>"
 
@@ -155,7 +160,9 @@ def _var_name(value: object) -> str | None:
     """A config value that should name an env var. Anything else may be the secret itself."""
     if not isinstance(value, str) or not value:
         return None
-    return value if VAR_NAME.fullmatch(value) else INVALID_VAR
+    if not VAR_NAME.fullmatch(value) or TOKEN_SHAPED.match(value):
+        return INVALID_VAR
+    return value
 
 
 def from_codex_mcp(home: Path, cwd: Path | None) -> list[Grant]:
@@ -188,7 +195,7 @@ def from_codex_mcp(home: Path, cwd: Path | None) -> list[Grant]:
             server = f"mcp:codex/{name}"
             grants.append(Grant(server, "mcp-server", where, name))
             env = spec.get("env", {})
-            variables = set(env) if isinstance(env, dict) else set()
+            variables = {var for var in map(_var_name, env) if var} if isinstance(env, dict) else set()
             forwarded = spec.get("env_vars", [])
             if isinstance(forwarded, list):
                 for item in forwarded:
@@ -206,7 +213,7 @@ def from_codex_mcp(home: Path, cwd: Path | None) -> list[Grant]:
             # Header *names* identify configured inline authority; values never escape.
             static_headers = spec.get("http_headers", {})
             if isinstance(static_headers, dict):
-                for header in sorted(static_headers):
+                for header in sorted({h if HEADER_NAME.fullmatch(h) else INVALID_HEADER for h in static_headers}):
                     grants.append(Grant(f"{server}/header/{header}", "mcp-server-header", where, header))
             # Settings that carry authority are recorded by presence; their values never escape.
             oauth = spec.get("oauth", {})

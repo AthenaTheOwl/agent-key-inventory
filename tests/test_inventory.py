@@ -8,6 +8,8 @@ from agent_key_inventory.scan import scan
 EX = Path(__file__).resolve().parents[1] / "examples"
 HOME, ENV, PROJECT, USAGE = EX / "home", EX / "session.env-names", EX / "project", EX / "usage-2026-09.jsonl"
 PLANTED = re.compile(r"PLANTED-SECRET-VALUE-\d+")
+# A token format that is also a valid variable name; assembled at runtime, never a literal.
+TOKEN_SHAPED = "gh" + "p_" + "PLANTEDSECRETVALUE" + "0" * 18
 
 
 def _run(argv, capsys):
@@ -25,13 +27,17 @@ def _misplaced_codex_home(root):
     config.write_text("\n".join([
         "[mcp_servers.remote]",
         f'bearer_token_env_var = "{value}11"',
-        f'env_vars = ["{value}12", {{ name = "Bearer {value}13" }}]',
+        f'env_vars = ["{value}12", {{ name = "Bearer {value}13" }}, "{TOKEN_SHAPED}"]',
         f'auth = "Bearer {value}17"',
         f'http_headers_helper = ["sh", "-c", "printf {value}18"]',
         f'oauth = {{ client_secret = "{value}19" }}',
         "[mcp_servers.remote.env_http_headers]",
         f'Authorization = "Bearer {value}14"',
         'X-Api-Key = "REMOTE_API_KEY"',
+        "[mcp_servers.remote.env]",
+        f'"{value}20" = "x"',
+        "[mcp_servers.remote.http_headers]",
+        f'"Bearer {value}21" = "x"',
         "",
     ]), encoding="utf-8")
     return root
@@ -95,10 +101,11 @@ def test_no_output_ever_contains_a_planted_value(tmp_path, capsys):
         outputs.append(_run(["diff", str(inventory), str(USAGE), "--json"], capsys)[1])
     for text in outputs:
         assert not PLANTED.search(text), text
+        assert TOKEN_SHAPED not in text, text
     # The original fixture and Codex fixture hold ten distinct planted values.
     planted = {m for p in EX.rglob("*") if p.is_file() for m in PLANTED.findall(p.read_text(encoding="utf-8"))}
     assert len(planted) == 10
-    assert len(set(PLANTED.findall((misplaced / ".codex" / "config.toml").read_text(encoding="utf-8")))) == 7
+    assert len(set(PLANTED.findall((misplaced / ".codex" / "config.toml").read_text(encoding="utf-8")))) == 9
 
 
 def test_codex_mcp_lists_inline_forwarded_and_http_authority():
@@ -117,7 +124,8 @@ def test_codex_fields_that_name_a_variable_or_mode_never_echo_a_value(tmp_path):
     ids = {g["grant_id"] for g in scan(_misplaced_codex_home(tmp_path), {})}
     assert ids == {"mcp:codex/remote", "mcp:codex/remote/env/<invalid-name>",
                    "mcp:codex/remote/env/REMOTE_API_KEY", "mcp:codex/remote/auth/<invalid-mode>",
-                   "mcp:codex/remote/http_headers_helper", "mcp:codex/remote/oauth/client_secret"}
+                   "mcp:codex/remote/http_headers_helper", "mcp:codex/remote/oauth/client_secret",
+                   "mcp:codex/remote/header/<invalid-header>"}
 
 
 def test_codex_project_config_is_included_and_malformed_config_is_skipped(tmp_path):

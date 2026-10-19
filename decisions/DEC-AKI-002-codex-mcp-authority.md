@@ -9,8 +9,6 @@ Read home and explicitly supplied project configurations with the standard
 library TOML reader. Record server names, inline and forwarded variable names,
 bearer-token variable names, and HTTP header names. Never resolve environment
 references, read OAuth stores, execute header helpers, or return header values.
-A field that should name a variable but holds anything else is recorded as
-`<invalid-name>`, because it may be the secret itself.
 Keep disabled declarations visible because a scan describes configured authority;
 the usage log remains the evidence that a particular grant was exercised.
 
@@ -37,6 +35,15 @@ ChatGPT session), with any other value recorded as `<invalid-mode>`; and an
 `http_headers_helper` command. The secret and the command are never returned, and
 the helper is never run. The planted Codex fixture now also holds values in a
 client secret and a helper command.
+
+A field that should name a variable (an inline `env` key, an `env_vars` entry,
+`bearer_token_env_var` or an `env_http_headers` value) but holds anything else, or
+holds a known token format that is also a valid name (GitHub `ghp_`/`github_pat_`,
+AWS `AKIA`/`ASIA`, Stripe `sk_live_` and similar), is recorded as `<invalid-name>`,
+because it may be the secret itself. A static `http_headers` name that is not an
+HTTP token is recorded as `<invalid-header>`. A secret shaped like an ordinary
+variable name cannot be told apart from one and is recorded as written; the guard
+narrows that risk without closing it.
 
 Configuration reference checked 2026-10-19:
 [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference).

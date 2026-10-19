@@ -50,9 +50,12 @@ Without `--home` and `--env-file` it scans your own home directory and this proc
 
 Home and explicitly supplied project `.codex/config.toml` files are also inventoried.
 The scan includes inline and forwarded environment variable names, bearer-token
-variable names, and static HTTP header names. Header values stay private, and a
-field that should name a variable but holds anything else is listed as
-`<invalid-name>`, since it may be the secret itself. It also records that a server
+variable names, and static HTTP header names. Header values stay private. A
+field that should name a variable but holds anything else, or holds a known token
+format such as a GitHub, AWS or Stripe key, is listed as `<invalid-name>`, since
+it may be the secret itself; a header name that is not a valid HTTP token is listed
+as `<invalid-header>`. A secret shaped like an ordinary variable name cannot be told
+apart from one and is listed as written. It also records that a server
 has an inline `oauth.client_secret` (kind `mcp-server-inline-secret`), an `auth`
 mode (`oauth` or `chatgpt`, anything else as `<invalid-mode>`) or an
 `http_headers_helper` command, never the secret or the command. Try the synthetic fixture with `agent-key-inventory scan --home examples/codex-home --env-names examples/session.env-names`.
