@@ -42,18 +42,37 @@ granted 6, used 2, unused 4
 
 Exit 1, because four grants went unused and the default `--max-unused` is 0. Exit 2 means bad input.
 
-The example home and project hold six planted values; the separate Codex fixture adds two. All are `PLANTED-SECRET-VALUE-NN`. The test suite runs output modes and fails if any of them appears.
+The example home and project hold six planted values; the separate Codex fixture adds four. All are `PLANTED-SECRET-VALUE-NN`. The test suite runs output modes and fails if any of them appears.
+
+Without `--home` and `--env-file` it scans your own home directory and this process's environment. Output stays names and locations, but it is still a map of what your machine can reach, so treat it accordingly.
 
 ### Codex MCP configuration
 
 Home and explicitly supplied project `.codex/config.toml` files are also inventoried.
-The scan includes inline and forwarded environment variable names, bearer-token
-variable names, and static HTTP header names. Header values stay private. Try the
-synthetic fixture with `agent-key-inventory scan --home examples/codex-home --env-names examples/session.env-names`.
+At home only `<home>/.codex/config.toml` is read; `$CODEX_HOME` is not followed.
+The scan includes inline, forwarded, bearer-token and header-sourcing
+(`env_http_headers`) variable names, and static `http_headers` names. Header values
+stay private. A field that should name a variable but holds anything else, or holds
+a known token format such as a GitHub, AWS or Stripe key, is listed as
+`<invalid-name>`, since it may be the secret itself; a header name that is not a
+valid HTTP token is listed as `<invalid-header>`. A value shaped like an ordinary
+variable name is listed as written only when it is clearly a name: the scanned
+environment defines it, or it is upper case and ends in a credential word such as
+`_TOKEN`, `_KEY`, `_SECRET` or `_PASSWORD`. Any other name-shaped value, such as a
+lower-case name or `MY_ENDPOINT` when nothing defines it, may be the secret itself and
+is listed as `<withheld-name:FINGERPRINT>`, a stable 12-hex-digit label that never
+contains the value. The same guard applies to `env` keys in the JSON MCP configs. It also
+records that a server has an inline `oauth.client_secret` (kind `mcp-server-inline-secret`), an `auth`
+mode (`oauth` or `chatgpt`, anything else as `<invalid-mode>`; recorded only when
+`auth` is set explicitly, the implicit default `oauth` is not assumed) or an
+`http_headers_helper` command, never the secret or the command. Try the synthetic fixture with `agent-key-inventory scan --home examples/codex-home --env-names examples/session.env-names`.
 This inventories declarations, including disabled servers. It does not resolve
 Codex's configuration layers, inspect OAuth storage, or run header helpers.
 
-Without `--home` and `--env-file` it scans your own home directory and this process's environment. Output stays names and locations, but it is still a map of what your machine can reach, so treat it accordingly.
+Codex grant ids start with `mcp:codex/`, for example `mcp:codex/github` and
+`mcp:codex/github/env/GITHUB_TOKEN`; servers from the JSON config files keep
+`mcp:server/<name>`. A Codex server and a `.mcp.json` server with the same name
+are two grants, so a usage log names the one it used: `{"grant": "mcp:codex/github"}`.
 
 ## What it does not do
 
