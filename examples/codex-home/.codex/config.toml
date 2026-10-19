@@ -1,0 +1,16 @@
+[mcp_servers.docs]
+command = "example-mcp-server"
+env_vars = ["DOCS_TOKEN", { name = "REMOTE_TOKEN", source = "remote" }]
+
+[mcp_servers.docs.env]
+INLINE_TOKEN = "PLANTED-SECRET-VALUE-09"
+
+[mcp_servers.remote]
+url = "https://example.invalid/mcp"
+bearer_token_env_var = "MCP_BEARER_TOKEN"
+
+[mcp_servers.remote.env_http_headers]
+X-Api-Key = "REMOTE_API_KEY"
+
+[mcp_servers.remote.http_headers]
+Authorization = "PLANTED-SECRET-VALUE-10"

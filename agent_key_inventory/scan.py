@@ -10,6 +10,7 @@ from __future__ import annotations
 import configparser
 import json
 import re
+import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -146,7 +147,57 @@ def from_mcp(home: Path, cwd: Path | None) -> list[Grant]:
     return grants
 
 
+def from_codex_mcp(home: Path, cwd: Path | None) -> list[Grant]:
+    """Inventory Codex MCP declarations without resolving or returning credentials.
+
+    OAuth stores and header helper commands are deliberately never read or run.
+    Disabled servers remain visible: this is configured authority, not a claim
+    that a particular session loaded or used the server.
+    """
+    grants = []
+    candidates = [(home / ".codex" / "config.toml", home)]
+    if cwd is not None and cwd != home:
+        candidates.append((cwd / ".codex" / "config.toml", cwd))
+    for path, root in candidates:
+        if not path.is_file():
+            continue
+        try:
+            config = tomllib.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, UnicodeError):
+            continue
+        servers = config.get("mcp_servers", {})
+        if not isinstance(servers, dict):
+            continue
+        where = _rel(path, home) if root == home else "./.codex/config.toml"
+        for name, spec in sorted(servers.items()):
+            if not isinstance(spec, dict):
+                continue
+            grants.append(Grant(f"mcp:server/{name}", "mcp-server", where, name))
+            env = spec.get("env", {})
+            variables = set(env) if isinstance(env, dict) else set()
+            forwarded = spec.get("env_vars", [])
+            if isinstance(forwarded, list):
+                for item in forwarded:
+                    var = item.get("name") if isinstance(item, dict) else item
+                    if isinstance(var, str) and var:
+                        variables.add(var)
+            bearer = spec.get("bearer_token_env_var")
+            if isinstance(bearer, str) and bearer:
+                variables.add(bearer)
+            headers = spec.get("env_http_headers", {})
+            if isinstance(headers, dict):
+                variables.update(var for var in headers.values() if isinstance(var, str) and var)
+            for var in sorted(variables):
+                grants.append(Grant(f"mcp:server/{name}/env/{var}", "mcp-server-env", where, var))
+            # Header *names* identify configured inline authority; values never escape.
+            static_headers = spec.get("http_headers", {})
+            if isinstance(static_headers, dict):
+                for header in sorted(static_headers):
+                    grants.append(Grant(f"mcp:server/{name}/header/{header}", "mcp-server-header", where, header))
+    return grants
+
+
 def scan(home: Path, env: dict[str, str], cwd: Path | None = None) -> list[dict]:
     grants = (from_env(env) + from_aws(home) + from_gh(home) + from_ssh(home)
-              + from_token_files(home) + from_mcp(home, cwd))
+              + from_token_files(home) + from_mcp(home, cwd) + from_codex_mcp(home, cwd))
     return [asdict(g) for g in sorted(set(grants))]
