@@ -17,7 +17,8 @@ def _run(argv, capsys):
 
 
 def _misplaced_codex_home(root):
-    """Values typed where Codex expects env var names, assembled so no literal sits in the source."""
+    """Values typed where Codex expects env var names or an auth mode, and inline secrets
+    in shapes the fixture does not use, assembled so no literal sits in the source."""
     value = "PLANTED-SECRET-VALUE-"
     config = root / ".codex" / "config.toml"
     config.parent.mkdir(parents=True)
@@ -25,6 +26,9 @@ def _misplaced_codex_home(root):
         "[mcp_servers.remote]",
         f'bearer_token_env_var = "{value}11"',
         f'env_vars = ["{value}12", {{ name = "Bearer {value}13" }}]',
+        f'auth = "Bearer {value}17"',
+        f'http_headers_helper = ["sh", "-c", "printf {value}18"]',
+        f'oauth = {{ client_secret = "{value}19" }}',
         "[mcp_servers.remote.env_http_headers]",
         f'Authorization = "Bearer {value}14"',
         'X-Api-Key = "REMOTE_API_KEY"',
@@ -77,10 +81,15 @@ def test_no_output_ever_contains_a_planted_value(tmp_path, capsys):
         ["scan", "--home", str(EX / "codex-home"), "--env-names", str(ENV), "--json"],
         ["scan", "--home", str(misplaced), "--env-names", str(ENV)],
         ["scan", "--home", str(misplaced), "--env-names", str(ENV), "--json"],
+        # the same Codex configs read as project configs
+        ["scan", "--home", str(HOME), "--env-names", str(ENV), "--cwd", str(EX / "codex-home")],
+        ["scan", "--home", str(HOME), "--env-names", str(ENV), "--cwd", str(EX / "codex-home"), "--json"],
+        ["scan", "--home", str(HOME), "--env-names", str(ENV), "--cwd", str(misplaced)],
+        ["scan", "--home", str(HOME), "--env-names", str(ENV), "--cwd", str(misplaced), "--json"],
     ):
         outputs.append(_run(argv, capsys)[1])
-    # diff every --json inventory: the original home/project scan and both Codex scans.
-    for scanned in (outputs[1], outputs[3], outputs[5]):
+    # diff every --json inventory: the original home/project scan and each Codex scan.
+    for scanned in outputs[1::2]:
         inventory.write_text(scanned, encoding="utf-8")
         outputs.append(_run(["diff", str(inventory), str(USAGE)], capsys)[1])
         outputs.append(_run(["diff", str(inventory), str(USAGE), "--json"], capsys)[1])
@@ -89,6 +98,7 @@ def test_no_output_ever_contains_a_planted_value(tmp_path, capsys):
     # The original fixture and Codex fixture hold ten distinct planted values.
     planted = {m for p in EX.rglob("*") if p.is_file() for m in PLANTED.findall(p.read_text(encoding="utf-8"))}
     assert len(planted) == 10
+    assert len(set(PLANTED.findall((misplaced / ".codex" / "config.toml").read_text(encoding="utf-8")))) == 7
 
 
 def test_codex_mcp_lists_inline_forwarded_and_http_authority():
@@ -103,10 +113,11 @@ def test_codex_mcp_lists_inline_forwarded_and_http_authority():
     }
 
 
-def test_codex_fields_that_name_a_variable_never_echo_a_value(tmp_path):
+def test_codex_fields_that_name_a_variable_or_mode_never_echo_a_value(tmp_path):
     ids = {g["grant_id"] for g in scan(_misplaced_codex_home(tmp_path), {})}
     assert ids == {"mcp:codex/remote", "mcp:codex/remote/env/<invalid-name>",
-                   "mcp:codex/remote/env/REMOTE_API_KEY"}
+                   "mcp:codex/remote/env/REMOTE_API_KEY", "mcp:codex/remote/auth/<invalid-mode>",
+                   "mcp:codex/remote/http_headers_helper", "mcp:codex/remote/oauth/client_secret"}
 
 
 def test_codex_project_config_is_included_and_malformed_config_is_skipped(tmp_path):
