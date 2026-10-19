@@ -21,3 +21,11 @@ this inventory's claim.
 
 Primary format reference, checked 2026-10-18:
 [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
+
+## Amendment, 2026-10-19
+
+Codex grant ids use their own namespace, `mcp:codex/<name>`, with the same
+`/env/<VAR>` and `/header/<name>` suffixes. Sharing `mcp:server/<name>` with the
+JSON readers gave a Codex server and a `.mcp.json` server of the same name one
+grant id, so `diff` counted use of either as use of both. Ids from the JSON
+readers are unchanged.

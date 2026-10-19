@@ -94,17 +94,17 @@ def test_no_output_ever_contains_a_planted_value(tmp_path, capsys):
 def test_codex_mcp_lists_inline_forwarded_and_http_authority():
     ids = {g["grant_id"] for g in scan(EX / "codex-home", {})}
     assert ids == {
-        "mcp:server/docs", "mcp:server/docs/env/INLINE_TOKEN",
-        "mcp:server/docs/env/DOCS_TOKEN", "mcp:server/docs/env/REMOTE_TOKEN",
-        "mcp:server/remote", "mcp:server/remote/env/MCP_BEARER_TOKEN",
-        "mcp:server/remote/env/REMOTE_API_KEY", "mcp:server/remote/header/Authorization",
+        "mcp:codex/docs", "mcp:codex/docs/env/INLINE_TOKEN",
+        "mcp:codex/docs/env/DOCS_TOKEN", "mcp:codex/docs/env/REMOTE_TOKEN",
+        "mcp:codex/remote", "mcp:codex/remote/env/MCP_BEARER_TOKEN",
+        "mcp:codex/remote/env/REMOTE_API_KEY", "mcp:codex/remote/header/Authorization",
     }
 
 
 def test_codex_fields_that_name_a_variable_never_echo_a_value(tmp_path):
     ids = {g["grant_id"] for g in scan(_misplaced_codex_home(tmp_path), {})}
-    assert ids == {"mcp:server/remote", "mcp:server/remote/env/<invalid-name>",
-                   "mcp:server/remote/env/REMOTE_API_KEY"}
+    assert ids == {"mcp:codex/remote", "mcp:codex/remote/env/<invalid-name>",
+                   "mcp:codex/remote/env/REMOTE_API_KEY"}
 
 
 def test_codex_project_config_is_included_and_malformed_config_is_skipped(tmp_path):
@@ -113,10 +113,27 @@ def test_codex_project_config_is_included_and_malformed_config_is_skipped(tmp_pa
     config = project / ".codex" / "config.toml"
     config.write_text('[mcp_servers.project]\ncommand = "example"\n', encoding="utf-8")
     grants = scan(tmp_path / "home", {}, project)
-    assert grants == [{"grant_id": "mcp:server/project", "kind": "mcp-server",
+    assert grants == [{"grant_id": "mcp:codex/project", "kind": "mcp-server",
                        "source": "./.codex/config.toml", "name": "project"}]
     config.write_text("invalid toml [", encoding="utf-8")
     assert scan(tmp_path / "home", {}, project) == []
+
+
+def test_codex_and_json_servers_with_one_name_stay_separate_grants(tmp_path, capsys):
+    project = tmp_path / "project"
+    (project / ".codex").mkdir(parents=True)
+    (project / ".mcp.json").write_text('{"mcpServers": {"github": {"command": "gh-mcp"}}}', encoding="utf-8")
+    (project / ".codex" / "config.toml").write_text('[mcp_servers.github]\ncommand = "gh-mcp"\n', encoding="utf-8")
+    names, usage, inventory = tmp_path / "env-names", tmp_path / "usage.jsonl", tmp_path / "inventory.json"
+    names.write_text("", encoding="utf-8")
+    usage.write_text('{"grant": "mcp:server/github"}\n', encoding="utf-8")
+    scanned = ["scan", "--home", str(tmp_path / "home"), "--env-names", str(names), "--cwd", str(project), "--json"]
+    inventory.write_text(_run(scanned, capsys)[1], encoding="utf-8")
+    code, out = _run(["diff", str(inventory), str(usage), "--json"], capsys)
+    report = json.loads(out)
+    assert (code, report["granted"]) == (1, 2)
+    assert report["used"] == ["mcp:server/github"]
+    assert report["unused"] == ["mcp:codex/github"]
 
 
 def test_codex_home_config_is_read_once_when_cwd_is_home_spelled_differently(tmp_path, monkeypatch):

@@ -161,7 +161,9 @@ def from_codex_mcp(home: Path, cwd: Path | None) -> list[Grant]:
 
     OAuth stores and header helper commands are deliberately never read or run.
     Disabled servers remain visible: this is configured authority, not a claim
-    that a particular session loaded or used the server.
+    that a particular session loaded or used the server. Ids sit under
+    mcp:codex/ so a Codex server never shares a grant id with a JSON-configured
+    server of the same name.
     """
     grants = []
     candidates = [(home / ".codex" / "config.toml", home)]
@@ -181,7 +183,8 @@ def from_codex_mcp(home: Path, cwd: Path | None) -> list[Grant]:
         for name, spec in sorted(servers.items()):
             if not isinstance(spec, dict):
                 continue
-            grants.append(Grant(f"mcp:server/{name}", "mcp-server", where, name))
+            server = f"mcp:codex/{name}"
+            grants.append(Grant(server, "mcp-server", where, name))
             env = spec.get("env", {})
             variables = set(env) if isinstance(env, dict) else set()
             forwarded = spec.get("env_vars", [])
@@ -197,12 +200,12 @@ def from_codex_mcp(home: Path, cwd: Path | None) -> list[Grant]:
             if isinstance(headers, dict):
                 variables.update(var for var in map(_var_name, headers.values()) if var)
             for var in sorted(variables):
-                grants.append(Grant(f"mcp:server/{name}/env/{var}", "mcp-server-env", where, var))
+                grants.append(Grant(f"{server}/env/{var}", "mcp-server-env", where, var))
             # Header *names* identify configured inline authority; values never escape.
             static_headers = spec.get("http_headers", {})
             if isinstance(static_headers, dict):
                 for header in sorted(static_headers):
-                    grants.append(Grant(f"mcp:server/{name}/header/{header}", "mcp-server-header", where, header))
+                    grants.append(Grant(f"{server}/header/{header}", "mcp-server-header", where, header))
     return grants
 
 

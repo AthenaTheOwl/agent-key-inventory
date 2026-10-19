@@ -56,6 +56,11 @@ field that should name a variable but holds anything else is listed as
 This inventories declarations, including disabled servers. It does not resolve
 Codex's configuration layers, inspect OAuth storage, or run header helpers.
 
+Codex grant ids start with `mcp:codex/`, for example `mcp:codex/github` and
+`mcp:codex/github/env/GITHUB_TOKEN`; servers from the JSON config files keep
+`mcp:server/<name>`. A Codex server and a `.mcp.json` server with the same name
+are two grants, so a usage log names the one it used: `{"grant": "mcp:codex/github"}`.
+
 ## What it does not do
 
 It does not collect usage: the log comes from whatever runs the agent. It does not revoke anything, and it cannot see authority that lives outside the files it knows, such as a browser session or an OS keychain.
