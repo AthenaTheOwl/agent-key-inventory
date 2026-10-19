@@ -119,6 +119,13 @@ def test_codex_project_config_is_included_and_malformed_config_is_skipped(tmp_pa
     assert scan(tmp_path / "home", {}, project) == []
 
 
+def test_codex_home_config_is_read_once_when_cwd_is_home_spelled_differently(tmp_path, monkeypatch):
+    (tmp_path / ".codex").mkdir()
+    (tmp_path / ".codex" / "config.toml").write_text('[mcp_servers.project]\ncommand = "example"\n', encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    assert [g["source"] for g in scan(tmp_path, {}, Path("."))] == ["~/.codex/config.toml"]
+
+
 def test_bad_usage_log_exits_2(tmp_path, capsys):
     bad = tmp_path / "usage.jsonl"
     bad.write_text("not json\n", encoding="utf-8")

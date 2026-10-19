@@ -165,7 +165,7 @@ def from_codex_mcp(home: Path, cwd: Path | None) -> list[Grant]:
     """
     grants = []
     candidates = [(home / ".codex" / "config.toml", home)]
-    if cwd is not None and cwd != home:
+    if cwd is not None and cwd.resolve() != home.resolve():
         candidates.append((cwd / ".codex" / "config.toml", cwd))
     for path, root in candidates:
         if not path.is_file():
