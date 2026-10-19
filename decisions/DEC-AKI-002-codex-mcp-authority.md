@@ -31,7 +31,8 @@ readers are unchanged.
 Three more settings carry authority and are recorded by presence only: an inline
 `oauth.client_secret`, which Codex saves in `config.toml` (kind
 `mcp-server-inline-secret`); the `auth` mode, `oauth` or `chatgpt` (the current
-ChatGPT session), with any other value recorded as `<invalid-mode>`; and an
+ChatGPT session), with any other value recorded as `<invalid-mode>`, recorded only
+when `auth` is set explicitly, so the implicit default `oauth` is not assumed; and an
 `http_headers_helper` command. The secret and the command are never returned, and
 the helper is never run. The planted Codex fixture now also holds values in a
 client secret and a helper command.
@@ -44,6 +45,12 @@ because it may be the secret itself. A static `http_headers` name that is not an
 HTTP token is recorded as `<invalid-header>`. A secret shaped like an ordinary
 variable name cannot be told apart from one and is recorded as written; the guard
 narrows that risk without closing it.
+
+To be exact about the original list: the variable names recorded are inline `env`
+keys, `env_vars` entries, `bearer_token_env_var`, and the variables that
+`env_http_headers` reads header values from. The header names recorded are the
+static `http_headers` names; `env_http_headers` header names are not recorded.
+Only `<home>/.codex/config.toml` is read at home; `$CODEX_HOME` is not followed.
 
 Configuration reference checked 2026-10-19:
 [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference).
